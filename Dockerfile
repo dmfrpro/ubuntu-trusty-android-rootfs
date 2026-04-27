@@ -49,7 +49,9 @@ RUN dpkg --add-architecture i386 && \
         gcc-multilib \
         git \
         openssh-client \
-        wget
+        wget \
+        device-tree-compiler \
+        zlib1g-dev
 
 # Suppress security
 RUN echo "ALL ALL=NOPASSWD: ALL" >> /etc/sudoers && \
@@ -59,3 +61,13 @@ RUN echo "ALL ALL=NOPASSWD: ALL" >> /etc/sudoers && \
     echo "* hard nofile 1000000" >> /etc/security/limits.conf && \
     rm -rf /run/shm && mkdir -p /run/shm && \
     rm -rf /home/*
+
+# Install zstd
+RUN cd /tmp && \
+    wget https://github.com/facebook/zstd/releases/download/v1.5.5/zstd-1.5.5.tar.gz && \
+    tar xf zstd-1.5.5.tar.gz && \
+    cd zstd-1.5.5 && \
+    make -j$(nproc) && \
+    make install && \
+    ldconfig && \
+    cd / && rm -rf /tmp/zstd-1.5.5 /tmp/zstd-1.5.5.tar.gz
