@@ -1,5 +1,9 @@
-# Manually imported from https://releases.sailfishos.org/ubu/ubuntu-trusty-20180613-android-rootfs.tar.bz2
-FROM dmfrpro/ubuntu-trusty-sfossdk:20180613
+FROM busybox AS rootfs
+ADD https://releases.sailfishos.org/ubu/ubuntu-trusty-20180613-android-rootfs.tar.bz2 /tmp/rootfs.tar.bz2
+RUN mkdir /rootfs && tar -xjf /tmp/rootfs.tar.bz2 -C /rootfs
+
+FROM scratch
+COPY --from=rootfs /rootfs /
 
 # Update repos
 RUN echo 'deb http://archive.ubuntu.com/ubuntu/ trusty main universe multiverse restricted' >> /etc/apt/sources.list && \
@@ -43,7 +47,9 @@ RUN dpkg --add-architecture i386 && \
         rsync \
         g++-multilib \
         gcc-multilib \
-        git
+        git \
+        openssh-client \
+        wget
 
 # Suppress security
 RUN echo "ALL ALL=NOPASSWD: ALL" >> /etc/sudoers && \
