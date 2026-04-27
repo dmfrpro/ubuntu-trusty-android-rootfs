@@ -1,5 +1,9 @@
-# Manually imported from https://releases.sailfishos.org/ubu/ubuntu-trusty-20180613-android-rootfs.tar.bz2
-FROM dmfrpro/ubuntu-trusty-sfossdk:20180613
+FROM busybox AS rootfs
+ADD https://releases.sailfishos.org/ubu/ubuntu-trusty-20180613-android-rootfs.tar.bz2 /tmp/rootfs.tar.bz2
+RUN mkdir /rootfs && tar -xjf /tmp/rootfs.tar.bz2 -C /rootfs
+
+FROM scratch
+COPY --from=rootfs /rootfs /
 
 # Update repos
 RUN echo 'deb http://archive.ubuntu.com/ubuntu/ trusty main universe multiverse restricted' >> /etc/apt/sources.list && \
@@ -43,7 +47,9 @@ RUN dpkg --add-architecture i386 && \
         rsync \
         g++-multilib \
         gcc-multilib \
-        git
+        git \
+        openssh-client \
+        wget
 
 # Suppress security
 RUN echo "ALL ALL=NOPASSWD: ALL" >> /etc/sudoers && \
@@ -53,3 +59,43 @@ RUN echo "ALL ALL=NOPASSWD: ALL" >> /etc/sudoers && \
     echo "* hard nofile 1000000" >> /etc/security/limits.conf && \
     rm -rf /run/shm && mkdir -p /run/shm && \
     rm -rf /home/*
+
+# Install Nix (based on https://hub.docker.com/r/nixos/nix/dockerfile/ & adapted for Ubuntu)
+ARG NIX_VERSION=2.34.6
+RUN wget https://nixos.org/releases/nix/nix-${NIX_VERSION}/nix-${NIX_VERSION}-$(uname -m)-linux.tar.xz \
+    && tar xf nix-${NIX_VERSION}-$(uname -m)-linux.tar.xz \
+    && addgroup --gid 30000 --system nixbld \
+    && for i in $(seq 1 30); do \
+    useradd --system \
+    --no-create-home \
+    --home /var/empty \
+    --comment "Nix build user $i" \
+    --uid $((30000 + i)) \
+    --gid nogroup \
+    --groups nixbld \
+    --shell /bin/false \
+    nixbld$i ; \
+    done \
+    && mkdir -m 0755 /etc/nix \
+    && echo 'sandbox = false' > /etc/nix/nix.conf \
+    && mkdir -m 0755 /nix && USER=root sh nix-${NIX_VERSION}-$(uname -m)-linux/install \
+    && ln -s /nix/var/nix/profiles/default/etc/profile.d/nix.sh /etc/profile.d/ \
+    && rm -r /nix-${NIX_VERSION}-$(uname -m)-linux* \
+    && /nix/var/nix/profiles/default/bin/nix-collect-garbage --delete-old \
+    && /nix/var/nix/profiles/default/bin/nix-store --optimise \
+    && /nix/var/nix/profiles/default/bin/nix-store --verify --check-contents
+
+ONBUILD ENV \
+    ENV=/etc/profile \
+    USER=root \
+    PATH=/nix/var/nix/profiles/default/bin:/nix/var/nix/profiles/default/sbin:/bin:/sbin:/usr/bin:/usr/sbin \
+    GIT_SSL_CAINFO=/etc/ssl/certs/ca-certificates.crt \
+    NIX_SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt
+
+ENV \
+    ENV=/etc/profile \
+    USER=root \
+    PATH=/nix/var/nix/profiles/default/bin:/nix/var/nix/profiles/default/sbin:/bin:/sbin:/usr/bin:/usr/sbin \
+    GIT_SSL_CAINFO=/etc/ssl/certs/ca-certificates.crt \
+    NIX_SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt \
+    NIX_PATH=/nix/var/nix/profiles/per-user/root/channels
